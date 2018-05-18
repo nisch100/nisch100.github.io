@@ -1,0 +1,332 @@
+---
+title: "Classifying Spinal Deformity - Nischal Chandra"
+output: html_document
+---
+
+##  Motivation
+An important trait that makes you look confident and stiff as your posture i.e the way you stand. According to Body Language people with a slightly bent upper body or hunch are perceived as underconfident. It's important to check and see your posture always looks good. However you may not know if for a fact that your spine is actually deformed because of a complicated situation or if it is normal. So it is important to classify if you are normal or not. 
+
+##    Goal
+Provided with a couple of datasets with some important variables such as sacral_slope, pelvic-tilt and degree_spondlytis. I plan on first visualizing multiple variables as correlation between each of them and try to analyze what is classified abnormal or normal. Later on I plan on building a couple of models Logistic Regression and Random Forest to see which of these models has a better accuracy in correctly classifying the class i.e if it's abnormal or not.
+
+##Getting started
+
+Before starting the tutorial, make sure you have the latest **RStudio** version installed. You should be able to find the link [here](https://www.rstudio.com/products/rstudio/download/)
+
+Next step is to get the data from [spinal deformity](https://www.kaggle.com/uciml/biomechanical-features-of-orthopedic-patients)
+
+##Content
+
+This project is divided into 5 sections
+
+ * Loading and Tidying Data
+     + Loading Libraries
+     + Loading Datasets
+ * Exploratory Data Analysis
+     + Plotting Abnormality
+     + Plotting Abnormality Class
+     + Correlation Matrix
+     + Plotting pelvic_incidence vs sacral_slope
+     + Plotting pelvic_incidence vs pelvic_tilt
+     + Plotting pelvic_incidence vs lumbar_angle
+     + Plotting pelvic_incidence vs degree_spondylolisthesis
+ * Machine Learning
+     + Splitting Data
+     + Logistic Regression
+     + Random Forest
+     + Decision Tree
+     + Observation
+ * Conclusion
+ * Acknowledgement
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(message=FALSE, warning=FALSE)
+```
+
+## I. Loading and Tidying Data
+
+####Loading Libraries
+For plotting and several functionalities I have used several libraries.
+
+```{r loadlibraries}
+library(tidyverse)
+library(tidyr)
+library(lubridate)
+theme_set(theme_bw())
+library(gapminder)
+library(tidyverse)
+library(ggplot2)
+library(plotly)
+library("reticulate")
+library(dplyr)
+library(magrittr)
+library(rvest)
+library(plotrix)
+library(rpart)
+library(randomForest)
+library(rattle)
+library(rpart.plot)
+library(RColorBrewer)
+library(ISLR)
+library(cvTools)
+library(tree)
+library(rbokeh)
+library(ggpubr)
+```
+
+
+####Loading Datasets
+
+**Abnormality** dataset consists of 7 variables where 6 of them are our predictor variables that include  pelivic_incidence, pelivic_tilt, lumbar_lordis_angle, sacral_slope,pelvic_radius and spondalyties followed by the output variables which classifies the situation to be either abnormal or normal.
+
+**Spine_Category** dataset consists of similar 6 predictoe variables. However rather than classifying the output as abnormal, it has 2 subdivisions hernia and spondylolities. If it is neither of thenm then it classifies a person in the **normal** category.
+
+Although we have the same predictors in both the datasets let's just add the column **class** from spine_category to abnormal. This class includes types of complications if a person is abnormal.
+```{r readdata, echo = TRUE}
+abnormality <- read.csv("column_2C_weka.csv")
+spine_category <- read.csv("column_3C_weka.csv")
+abnormal<-abnormality
+abnormality<-abnormality%>%
+  mutate(complication = spine_category$class)
+```
+
+## II. Exploratory Data Analysis
+
+#### Plotting Abnormality
+Although we have loaded the dataset we still have no idea on how the classification is done. It may be dependant solely on one predictor or it can dependant on a couple of variables. So the code below takes in the **Abnormality** data and builds a scattermatrix such that we could possibly get an idea on how 2 predictors interact with each other.
+
+```{r plotabnormality, echo=TRUE}
+my_cols <- c("yellow","blue")
+pairs(abnormality[, 1:6], col = abnormality$class, oma=c(3,3,3,15))
+par(xpd = TRUE)
+legend("bottomright", fill = unique(abnormality$class), legend = c( levels(abnormality$class)))
+```
+
+Looking at the image above we can analyze using the legend as to what numbers basically correspond to the class.
+
+#### Plotting abnormality class
+Let's try plotting the classes from the spine_deformity dataset. This classifies what is considered **normal or hernia or spondylolithisis**.
+```{r plotComplication, echo=TRUE}
+pairs(abnormality[, 1:6], col = abnormality$complication, oma=c(3,3,3,15))
+par(xpd = TRUE)
+legend("bottomright", fill = unique(abnormality$complication), legend = c( levels(abnormality$complication)))
+```
+
+Well it doesn't look quite appealing although we have a picture on what kind of a complication is(if any). Let's try to check and see if we can arrive at a correlation matrix that tells us how 2 variables interact.
+
+#### Correlation Matrix
+
+Let's try generating the correlation to look like a heatmap.
+```{r corrmatrix, echo=TRUE}
+suppressMessages(library(corrplot))
+corr_mat <- cor(abnormality[,1:6])
+corrplot(corr_mat, method = "color")
+```
+
+The correlation matrix computed gives us a picture a picture on how well the variables above are related to each other. We ignore all the ones because the cofficient variables are the same. We do know that a few correlations are pretty significant. Let's try computing the actual number.
+
+```{r corrnumber, echo=TRUE}
+suppressMessages(library(corrplot))
+corr_mat <- cor(abnormality[,1:6])
+corrplot(corr_mat, method = "number")
+```
+
+Now we have a  few interesting observations. The relationship between           
+
+sacral_slope and pelvic_incidence -  **0.81**                                     
+pelvic_tilt_numeric and pelvic_incidence - **0.63**                            
+lumbar_lordosis_angle and pelvic_incidence - **0.72**                         
+degree_sponylolisthesis and pelvic_incidence - **0.64**
+
+If there is any any variable that appears in every observation, it is **pelvic_incidence**
+Let's actually try plotting these specific correlation with pelvic_incidence to visualize abnormality complication
+
+####Plotting pelvic_incidence vs sacral_slope
+
+```{r sacralpelvic, echo=TRUE}
+
+ggplot(abnormality, aes(sacral_slope,pelvic_incidence, colour = factor(complication))) +
+  geom_point() + facet_wrap(~ complication, ncol = 2, scales = "free") +
+  guides(colour = "none") +
+  theme()
+
+figure() %>%
+  ly_points(sacral_slope, pelvic_incidence, data = abnormality,
+    color = complication, glyph = complication)
+```
+
+Now we have a clearer picture between pelvic_incidence and sacral_slope. Some important observation you can make here are    
+
+I. Hernia - Sacral_slope from 0 - 50 kand pelvic_incidence starting ~10 to around 80.
+
+II.Normal - Typically ranges the same for pelvic_incidence.
+
+III.Spondylolisthesis - Most of the scatter points lie with sacral_slope of 75 and 100 for pelvic_incidence.
+
+####Plotting pelvic_tilt vs pelivic_incidence
+
+```{r pelvictilt, echo=TRUE}
+
+ggplot(abnormality, aes(pelvic_tilt.numeric,pelvic_incidence, colour = factor(complication))) +
+  geom_point() + facet_wrap(~ complication, ncol = 2, scales = "free") +
+  guides(colour = "none") +
+  theme()
+
+figure() %>%
+  ly_points(pelvic_tilt.numeric, pelvic_incidence, data = abnormality,
+    color = complication, glyph = complication)
+```
+Now we have a clearer picture between pelvic_incidence and tilt_numeric. Some important observation you can make here are                                                         
+
+I. Hernia - Sacral_slope from 0 - 50 kand pelvic_incidence starting ~10 to around 70.
+
+II.Normal - Typically ranges the same for pelvic_incidence with ~10 to 80 for pelvic_inc.
+
+III.Spondylolisthesis - Ranges all the way from -5 to 50 for tilt and 30 to 100 for pelvic_incidence.
+
+####Plotting lumbar_angle vs pelvic_incidence
+
+```{r lumbarpelvic, echo=TRUE}
+
+ggplot(abnormality, aes(lumbar_lordosis_angle,pelvic_incidence, colour = factor(complication))) +
+  geom_point() + facet_wrap(~ complication, ncol = 2, scales = "free") +
+  guides(colour = "none") +
+  theme()
+
+figure() %>%
+  ly_points(lumbar_lordosis_angle, pelvic_incidence, data = abnormality,
+    color = complication, glyph = complication)
+```
+Now we have a clearer picture between pelvic_incidence and lumbar_angle. Some important observation you can make here are
+
+I. Hernia - lumbar_angle from 0 - 50 and pelvic_incidence starting ~30 to around 70.
+
+II.Normal - Typically ranges the same for pelvic_incidence and 20 - 70 for lumbar_angle.
+
+III.Spondylolisthesis - Most of the scatter points lie within lumbar_angle of 100 and 100 for pelvic_incidence.
+
+####Plotting degree_spondylolisthesis vs pelvic_incidence
+
+```{r pelvicdegree, echo=TRUE}
+
+ggplot(abnormality, aes(degree_spondylolisthesis,pelvic_incidence, colour = factor(complication))) +
+  geom_point() + facet_wrap(~ complication, ncol = 2, scales = "free") +
+  guides(colour = "none") +
+  theme()
+
+figure() %>%
+  ly_points(degree_spondylolisthesis, pelvic_incidence, data = abnormality,
+    color = complication, glyph = complication)
+```
+Now we have a clearer picture between pelvic_incidence and spondylolisthesis. Some important observation you can make here are
+
+
+I. Hernia - spondylolisthesis from -10 to 13 and pelvic_incidence starting ~15 to around 70.
+
+II.Normal - spondylolisthesis from -10 to 15 and pelvic_incidence starting ~30 to around 75.
+
+III.Spondylolisthesis -spondylolisthesis from 0 to 100 and pelvic_incidence starting ~40 to around 100.
+
+## III. Machine Learning
+We have indeed succeded in visualizing the abnormality class above for most of those variables. However when you notice it a lot of these points actually coincide when viewed as a complete plot. It is important to be able to classify then as accuractely as possible because there are chance that the classification may be incorrect among these classification. Although **hernia** and **spondylolisthesis** are different abnormalities, let's consider them to be of category **Abnormal** and the other category to be **Normal**
+
+There are several classification algorithms that can be used. However not every algorithm will not give us the same accuracy. Some do better and some are slightly off. So I want to pick about 3 different algorithms **Logistic Regression**, **Decision Tree** and **Random Forest** to know how well the algorithms perform on this dataset. 
+
+So this is done through 3 steps                                                           
+I. Split 75% into training and the remaining into test data.                              
+II. Run the model on the training data                                                    
+III. Predict your test results.
+
+###Preparing Data
+Let's split the data 75% into the training set and 25% with the test set. We shall later
+use this data on our algoithms
+
+
+```{r}
+#we have small dataset so we go for 70 / 30 split
+library(caret)
+set.seed(1234)
+data_index <- createDataPartition(abnormal$class, p=0.7, list = FALSE)
+train_data <- abnormal[data_index, ]
+test_data <- abnormal[-data_index, ]
+```
+
+###Logistic Regression
+
+#### Train LR model
+This is where we'll trainn the model on our split data. Let's take a peek at what it looks like.
+```{r}
+model <- glm(class ~ ., data = train_data, family="binomial")
+summary(model)
+
+```
+####Logisitic Regression Prediction
+Now is the time to make predicitons on our test_data. Let's view what the prediciton looks like.
+```{r}
+predict <- predict(model, test_data)
+y_pred = ifelse(predict>0.5,"Normal","Abnormal")
+fitted.results.cat<-as.factor(y_pred)
+table(test_data[,7],y_pred)
+```
+We can calculate our error rate here which is (8+9)x100/(100) = **~18.2%**
+
+
+###Random Forest
+
+
+#### Training Data
+
+Let's run the randomForest model and see what our summary looks like.
+```{r}
+randomForestModel = randomForest(class~., data=train_data)
+randomForestModel
+```
+
+####Predict RandomForest
+This is where we'll predict our test_data and see how well the model has cl;assified the data below.
+```{r}
+randomFor_pred = predict(randomForestModel, newdata=test_data, type="response")
+construct_frame<-data.frame(Orig=test_data$class, Pred= randomFor_pred)
+
+confusionMatrix(table(construct_frame$Orig,construct_frame$Pred))
+```
+The error rate on using RandomForest model here is **12.9%**
+
+###Decision Tree
+
+####Training using a decision tree
+```{r}
+dt_train <- rpart(abnormal$class~.,data = abnormal)
+rpart.plot(dt_train, 
+           box.palette="GnBu",
+           branch.lty=10, shadow.col="gray", nn=TRUE)
+```
+
+####Prediction on Decision_Trees
+```{r}
+pred <- predict(dt_train, test_data,type="class") 
+confusionMatrix(test_data$class, pred)
+```
+The error rate here is **12.9**
+
+###Observations
+Let's recall our error rates.                                                               
+Logistic Regression -  **18.2%**                                                                     
+Random Forest -   **12.9%**                                                                          
+Decision Tree - **12.9%**
+
+##Conclusion
+The best algorithm is the one that has the least possible error while classifying data. So looking above **Random Forest** /**Decision Tree** are the best algorithms that can be used over the other two. However it is important to know that algorithms error rate can vary from dataset to dataset. My above attempt is to compare some of the popular ones. There are several ones that could be used later on to achieve better accuracy. If you are smart, you can build your own classification algorithm.
+
+##Acknowledgement
+I have used several sources to come with with this tutorial and have posted them below  
+
+* Cheatsheet - [https://www.rstudio.com/wp-content/uploads/2015/02/rmarkdown-cheatsheet.pdf](https://www.rstudio.com/wp-content/uploads/2015/02/rmarkdown-cheatsheet.pdf)                                                      
+
+* HtmlWidget - [https://www.htmlwidgets.org](https://www.htmlwidgets.org)  
+
+* dygraphs - [https://rstudio.github.io/dygraphs/index.html](https://rstudio.github.io/dygraphs/index.html)
+
+I would like to thank my teacher [Hector Bravo](http://www.hcbravo.org/) for this opportunity which gave me a chance to show off
